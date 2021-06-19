@@ -33,6 +33,11 @@ public:
     void ReadFd(int cfd);
     void Disconnect(int cfd);
     void HttpRequest(int cfd, const char* request);
+    void SendRespondHead(int cfd, int no, const char* desp, const char* type, long len);
+    void SendError(int cfd, int status, const char *title, const char* text);
+    void SendDir(int cfd, const char* dirname);
+    void SendFile(int cfd, const char* filename);
+    const char *GetFileType(const char *name);
     int GetLine(int sock, char *buf, int size);
     virtual ~WebServer() = default;
 };

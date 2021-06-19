@@ -4,7 +4,7 @@
 * Createtime:Sat 19 Jun 2021 02:18:04 PM CST
 ================================================================*/
 
-#include "web_server.h"
+#include "../inc/web_server.h"
 using namespace std;
 
 WebServer::WebServer(int pt):port(pt){
@@ -178,4 +178,134 @@ void WebServer::Disconnect(int cfd){
 }
 void WebServer::HttpRequest(int cfd, const char* request){
 
+    // analyze http request
+    char method[12], path[1024], protocol[12];
+    sscanf(request, "%[^ ] %[^ ] %[^ ]", method, path, protocol);
+    printf("method = %s, path = %s, protocol = %s\n", method, path, protocol);
+
+    const char *file = path+1;
+
+    if(strcmp(path, "/") == 0) {
+        file = "./";
+    }
+
+    struct stat st;
+    int ret = stat(file, &st);
+    if(ret == -1) {
+        SendError(cfd, 404, "Not Found", "NO such file or direntry");
+        return;
+    }
+
+    if(S_ISDIR(st.st_mode)) {
+        SendRespondHead(cfd, 200, "OK", GetFileType(".html"), -1);
+        SendDir(cfd, file);
+    } else if(S_ISREG(st.st_mode)) {
+        SendRespondHead(cfd, 200, "OK", GetFileType(file), st.st_size);
+        SendFile(cfd, file);
+    }
+
+}
+void WebServer::SendError(int cfd, int status, const char *title, const char *text){
+	char buf[4096] = {0};
+
+	sprintf(buf, "%s %d %s\r\n", "HTTP/1.1", status, title);
+	sprintf(buf+strlen(buf), "Content-Type:%s\r\n", "text/html");
+	sprintf(buf+strlen(buf), "Content-Length:%d\r\n", -1);
+	sprintf(buf+strlen(buf), "Connection: close\r\n");
+	send(cfd, buf, strlen(buf), 0);
+	send(cfd, "\r\n", 2, 0);
+
+    bzero(buf, sizeof(buf));
+
+	sprintf(buf, "<html><head><title>%d %s</title></head>\n", status, title);
+	sprintf(buf+strlen(buf), "<body bgcolor=\"#87CEEB\"><h2 align=\"center\">%d %s</h4>\n", status, title);
+	sprintf(buf+strlen(buf), "%s\n", text);
+	sprintf(buf+strlen(buf), "<hr>\n</body>\n</html>\n");
+	send(cfd, buf, strlen(buf), 0);
+
+}
+void WebServer::SendRespondHead(int cfd, int no, const char* desp, const char* type, long len)
+{
+    char buf[1024] = {0};
+    // status
+    sprintf(buf, "http/1.1 %d %s\r\n", no, desp);
+    send(cfd, buf, strlen(buf), 0);
+    // message head
+    sprintf(buf, "Content-Type:%s\r\n", type);
+    sprintf(buf+strlen(buf), "Content-Length:%ld\r\n", len);
+    send(cfd, buf, strlen(buf), 0);
+    // blank line
+    send(cfd, "\r\n", 2, 0);
+}
+void WebServer::SendDir(int cfd, const char* dirname){
+}
+void WebServer::SendFile(int cfd, const char* filename){
+    int fd = open(filename, O_RDONLY);
+    if(fd == -1) {
+        SendError(cfd, 404, "Not Found", "NO such file or direntry");
+        exit(1);
+    }
+
+    char buf[4096] = {0};
+    int len = 0, ret = 0;
+    while( (len = read(fd, buf, sizeof(buf))) > 0 ) {
+        ret = send(cfd, buf, len, 0);
+        if (ret == -1) {
+            if (errno == EAGAIN) {
+                cerr << "send error" << endl;
+                continue;
+            } else if (errno == EINTR) {
+                cerr << "send error" << endl;
+                continue;
+            } else {
+                cerr << "send error" << endl;
+                exit(1);
+            }
+        }
+    }
+    if(len == -1)  {
+        cerr << "read file error" << endl;
+        exit(1);
+    }
+
+}
+const char* WebServer::GetFileType(const char *name){
+    const char* dot;
+
+    // from right to research '.'
+    dot = strrchr(name, '.');
+    if (dot == nullptr)
+        return "text/plain; charset=utf-8";
+    if (strcmp(dot, ".html") == 0 || strcmp(dot, ".htm") == 0)
+        return "text/html; charset=utf-8";
+    if (strcmp(dot, ".jpg") == 0 || strcmp(dot, ".jpeg") == 0)
+        return "image/jpeg";
+    if (strcmp(dot, ".gif") == 0)
+        return "image/gif";
+    if (strcmp(dot, ".png") == 0)
+        return "image/png";
+    if (strcmp(dot, ".css") == 0)
+        return "text/css";
+    if (strcmp(dot, ".au") == 0)
+        return "audio/basic";
+    if (strcmp( dot, ".wav" ) == 0)
+        return "audio/wav";
+    if (strcmp(dot, ".avi") == 0)
+        return "video/x-msvideo";
+    if (strcmp(dot, ".mov") == 0 || strcmp(dot, ".qt") == 0)
+        return "video/quicktime";
+    if (strcmp(dot, ".mpeg") == 0 || strcmp(dot, ".mpe") == 0)
+        return "video/mpeg";
+    if (strcmp(dot, ".vrml") == 0 || strcmp(dot, ".wrl") == 0)
+        return "model/vrml";
+    if (strcmp(dot, ".midi") == 0 || strcmp(dot, ".mid") == 0)
+        return "audio/midi";
+    if (strcmp(dot, ".mp3") == 0)
+        return "audio/mpeg";
+    if (strcmp(dot, ".ogg") == 0)
+        return "application/ogg";
+    if (strcmp(dot, ".pac") == 0)
+        return "application/x-ns-proxy-autoconfig";
+
+    return "text/plain; charset=utf-8";
 }
